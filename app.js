@@ -1,5 +1,8 @@
 require("dotenv").config();
 const express = require("express");
+const multer = require("multer");
+const path = require("path");
+
 const {
   GoogleGenerativeAI,
   HarmCategory,
@@ -49,21 +52,45 @@ app.get("/", async (req, res) => {
   }
 });
 
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/"); // Directory to store uploaded files
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 1 * 1024 * 1024 }, // Limit file size to 1 MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ["image/jpeg", "image/png", "image/jpg"];
+    if (!allowedTypes.includes(file.mimetype)) {
+      req.fileValidationError = "Only JPEG, PNG, and JPG images are allowed";
+      return cb(null, false); // Reject file
+    }
+    cb(null, true); // Accept file
+  },
+});
+
 // POST endpoint for processing requests
-app.post("/api/analyze", async (req, res) => {
+app.post("/api/upload-analyze", upload.single("file"), async (req, res) => {
   try {
+    const { file } = req;
     const {
-      filePath,
-      mimeType = "image/png",
       userMessage = "Analyze the input image and extract the total odometer reading. Return the result in the following JSON format:{ 'total_km': 'The odo number' }",
     } = req.body;
 
-    if (!filePath) {
-      return res.status(400).json({ error: "Missing required fields" });
+    if (!file) {
+      return res.status(400).json({ error: "File is required" });
     }
 
+    const filePath = file.path; // Path of the uploaded file
+    const mimeType = file.mimetype;
+
     // Upload the file to Gemini
-    const file = await uploadToGemini(filePath, mimeType);
+    const geminiFile = await uploadToGemini(filePath, mimeType);
 
     // Start a chat session
     const chatSession = model.startChat({
@@ -74,8 +101,8 @@ app.post("/api/analyze", async (req, res) => {
           parts: [
             {
               fileData: {
-                mimeType: file.mimeType,
-                fileUri: file.uri,
+                mimeType: geminiFile.mimeType,
+                fileUri: geminiFile.uri,
               },
             },
             { text: userMessage },
@@ -84,7 +111,7 @@ app.post("/api/analyze", async (req, res) => {
       ],
     });
 
-
+    // Send the user's message and get the model's response
     const result = await chatSession.sendMessage(userMessage);
     let responseText = result.response.text();
 
@@ -93,17 +120,23 @@ app.post("/api/analyze", async (req, res) => {
 
     let responseJson = {};
     try {
-      responseJson = JSON.parse(responseText);
+      const parsedResponse = JSON.parse(responseText); // Parse the model's response
+      responseJson = {
+        status: 200, // Add the desired status
+        ...parsedResponse, // Merge the parsed response (e.g., `{ "total_km": "2500000" }`)
+      };
     } catch (e) {
       console.error("Error parsing response:", e);
-      responseJson = { error: "Invalid response format" };
+      responseJson = { status: "error", message: "Invalid response format" };
     }
 
     // Send back the parsed result
     res.json(responseJson);
   } catch (error) {
     console.error("Error:", error);
-    res.status(500).json({ error: "An error occurred" });
+    res
+      .status(500)
+      .json({ error: "An error occurred", details: error.message });
   }
 });
 
