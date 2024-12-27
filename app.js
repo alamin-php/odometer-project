@@ -16,10 +16,28 @@ const PORT = 3000;
 // Middleware to parse JSON requests
 app.use(express.json());
 
+const verifyAccessKey = (req, res, next) => {
+  const providedKey = req.headers["api_token"];
+  const validKey = process.env.API_TOKEN;
+
+  if (!providedKey || providedKey !== validKey) {
+    return res.status(403).json({ error: "Invalid or missing Access_Key" });
+  }
+
+  next();
+};
+
+
+
 // Initialize Google Generative AI and File Manager
 const apiKey = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(apiKey);
 const fileManager = new GoogleAIFileManager(apiKey);
+
+// Access API key securely
+if (!apiKey) {
+  throw new Error("API key is missing. Please add it to the .env file.");
+}
 
 async function uploadToGemini(path, mimeType) {
   const uploadResult = await fileManager.uploadFile(path, {
@@ -75,7 +93,7 @@ const upload = multer({
 });
 
 // POST endpoint for processing requests
-app.post("/api/upload-analyze", upload.single("file"), async (req, res) => {
+app.post("/api/upload-analyze",verifyAccessKey, upload.single("file"), async (req, res) => {
   try {
     const { file } = req;
     const {
