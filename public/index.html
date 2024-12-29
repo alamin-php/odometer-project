@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Upload and Analyze Odometer</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background-color: #f8f9fa;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        margin: 0;
+      }
+      .container {
+        background: #fff;
+        padding: 20px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-radius: 8px;
+        width: 100%;
+        max-width: 400px;
+        text-align: center;
+      }
+      .container h2 {
+        margin-bottom: 20px;
+        font-size: 24px;
+      }
+      .container input,
+      .container button {
+        width: 100%;
+        padding: 10px;
+        margin: 10px 0;
+        font-size: 16px;
+        border-radius: 5px;
+      }
+      .container input {
+        border: 1px solid #ccc;
+      }
+      .container button {
+        background-color: #007bff;
+        color: white;
+        border: none;
+        cursor: pointer;
+      }
+      .container button:disabled {
+        background-color: #6c757d;
+        cursor: not-allowed;
+      }
+      .response {
+        margin-top: 20px;
+        padding: 10px;
+        background: #f1f1f1;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        text-align: left;
+        font-family: monospace;
+        font-size: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Upload Odometer Photo</h2>
+      <form id="uploadForm">
+        <input type="file" id="fileInput" name="file" accept="image/*" />
+        <img
+          id="preview"
+          src=""
+          alt="Image Preview"
+          style="display: none; width: 100%; height: auto; text-align: center"
+        />
+        <button type="submit" id="uploadButton">Upload and Analyze</button>
+      </form>
+      <div class="response" id="responseContainer" style="display: none">
+        <h4>Result:</h4>
+        <pre id="responseText"></pre>
+        <button type="button" id="reloadButton">New Upload</button>
+      </div>
+    </div>
+
+    <script>
+      const form = document.getElementById("uploadForm");
+      const fileInput = document.getElementById("fileInput");
+      const previewImage = document.getElementById("preview");
+      const userMessage = document.getElementById("userMessage");
+      const uploadButton = document.getElementById("uploadButton");
+      const responseContainer = document.getElementById("responseContainer");
+      const responseText = document.getElementById("responseText");
+      const reloadButton = document.getElementById("reloadButton");
+
+      // Function to show the image preview
+      const showImagePreview = (file) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          previewImage.src = reader.result;
+          previewImage.style.display = "block";
+        };
+        reader.readAsDataURL(file);
+      };
+
+      // Function to reset the form
+      const resetForm = () => {
+        fileInput.value = ""; // Clear the file input
+        previewImage.style.display = "none"; // Hide the preview image
+        responseContainer.style.display = "none"; // Hide response container
+        fileInput.style.display = "block"; // Show the file input
+        uploadButton.style.display = "block"; // Show upload button
+      };
+
+      // Function to handle the image upload
+      const uploadImage = async (formData) => {
+        try {
+          const res = await axios.post(
+            "http://localhost:3000/api/upload-analyze",
+            formData,
+            {
+              headers: {
+                api_token: "o-fGh0Wa0xVY9me4Z4Y331H1OiJE4A", // Example API token, make sure it's correct
+              },
+            }
+          );
+
+          console.log(res.data);
+          
+          return res.data;
+        } catch (error) {
+          console.error("Error:", error);
+          throw new Error("Failed to upload and analyze the image.");
+        }
+      };
+
+      // Event Listener for file input change
+      fileInput.addEventListener("change", (event) => {
+        const file = event.target.files[0];
+        if (file) {
+          showImagePreview(file);
+        }
+      });
+
+      // Event Listener for reload button click
+      reloadButton.addEventListener("click", resetForm);
+
+      // Event Listener for form submission
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        // Check if a file is selected
+        if (!fileInput.files.length) {
+          alert("Please select an image.");
+          return;
+        }
+
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]); // Directly get the file from input
+
+        // Disable upload button and show loading text
+        uploadButton.disabled = true;
+        uploadButton.textContent = "Please wait, Uploading...";
+
+        try {
+          // Upload the image and get the response
+          const responseData = await uploadImage(formData);
+
+          // Display the response in the UI
+          responseContainer.style.display = "block";
+          uploadButton.style.display = "none";
+          fileInput.style.display = "none";
+
+          // Build and display the response message
+          const htmlContent = `<p>Total KM: ${responseData.total_km}</p>`;
+          responseText.innerHTML = htmlContent;
+
+          // console.log("File uploaded and analyzed successfully!");
+        } catch (error) {
+          alert(error.message); // Show a user-friendly message
+        } finally {
+          // Reset the button to its original state
+          uploadButton.disabled = false;
+          uploadButton.textContent = "Upload and Analyze";
+        }
+      });
+    </script>
+  </body>
+</html>
